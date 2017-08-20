@@ -155,14 +155,13 @@ module.exports = ({ client, server, storage }) => {
   }
   const broadcast = (packet) => {
     Object.values(server.clients).forEach(_client => {
-      console.log('Broadcasted to', _client.username);
       client_send(_client, packet);
     });
   }
   const broadcast_nearby = (packet) => {
     Object.values(server.clients).forEach(_client => {
       if (_client.id !== client.id) {
-        console.log('Broadcasted to', _client.username);
+        console.log('Broadcasting to', _client.username);
         client_send(_client, packet);
       }
     });
@@ -187,6 +186,12 @@ module.exports = ({ client, server, storage }) => {
       return chunk;
     } else {
       // console.log('CHUNK from generation', x, z)
+      broadcast(Packet.create('chat', {
+        message: JSON.stringify({
+          text: 'Generating more chunks...',
+        }),
+        position: 2,
+      }));
       const initialized = initialize_chunk((chunk_x, chunk_y, chunk_z) => {
         const global_x = chunk_x + (x * 16);
         const global_z = chunk_z + (z * 16);
@@ -417,7 +422,17 @@ module.exports = ({ client, server, storage }) => {
       const chunkdata = await storage.get([`world`, chunk.x, chunk.z]);
       chunkdata.setBlockType(in_chunk, item.blockId);
       chunkdata.setBlockData(in_chunk, item.itemDamage);
+
       storage.set([`world`, chunk.x, chunk.z], chunkdata);
+      console.log('Packet:', Packet.create('block_change', {
+        location: block_location,
+        type: item.blockId,
+      }))
+      broadcast_nearby(Packet.create('block_change', {
+        location: block_location,
+        type: item.blockId << 4  | (item.itemDamage & 15),
+      }));
+      return;
     }
 
     if (metadata.name === 'block_dig') {
@@ -426,6 +441,10 @@ module.exports = ({ client, server, storage }) => {
       const chunkdata = await storage.get([`world`, chunk.x, chunk.z]);
       chunkdata.setBlockType(in_chunk, 0);
       storage.set([`world`, chunk.x, chunk.z], chunkdata);
+      broadcast_nearby(Packet.create('block_change', {
+        location: data.location,
+        type: 0,
+      }))
       return;
     }
 

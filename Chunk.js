@@ -338,6 +338,7 @@ class Chunk {
    */
 
   load(data, bitMap = 0xFFFF, skyLightSent = true) {
+    this.raw_data = data;
     let unpackeddata = this.unpackChunkData(data, bitMap, skyLightSent);
     if (!Buffer.isBuffer(unpackeddata))
       throw (new Error('Data must be a buffer'));

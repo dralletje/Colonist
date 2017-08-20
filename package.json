@@ -1,0 +1,31 @@
+{
+  "name": "colonist",
+  "version": "1.0.0",
+  "description": "",
+  "main": "Biome.js",
+  "dependencies": {
+    "bluebird": "^3.5.0",
+    "lodash": "^4.17.4",
+    "minecraft-data": "^2.20.0",
+    "minecraft-protocol": "^1.4.0",
+    "protodef": "^1.5.1",
+    "rxjs": "^5.4.3",
+    "spiralloop": "^1.0.2",
+    "uint4": "^0.1.2",
+    "vec3": "^0.1.3"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dralletje/Colonist.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dralletje/Colonist/issues"
+  },
+  "homepage": "https://github.com/dralletje/Colonist#readme"
+}
