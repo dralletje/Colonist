@@ -308,15 +308,28 @@ const chunk_view = (client, retrieve_chunk, visible_chunks$) => {
   const Load_Chunk = {
     create: xstream_from_async(async chunk => {
       await Promise.delay(50);
-      const chunkdata = await retrieve_chunk(chunk);
-      return Packet.create('map_chunk', {
-        x: chunk.x,
-        z: chunk.z,
-        groundUp: true,
-        bitMap: 0xffff,
-        chunkData: chunkdata.dump(),
-        blockEntities: [],
-      });
+
+      try {
+        const chunkdata = await retrieve_chunk(chunk);
+
+        let gen = chunkdata.dump();
+        let chunkdump = gen.next();
+        while (chunkdump.done !== true) {
+          await set_immediate();
+          chunkdump = gen.next();
+        }
+
+        return Packet.create('map_chunk', {
+          x: chunk.x,
+          z: chunk.z,
+          groundUp: true,
+          bitMap: 0xffff,
+          chunkData: chunkdump.value,
+          blockEntities: [],
+        });
+      } catch (e) {
+        console.log('e:', e)
+      }
     }),
     destroy: (chunk) => {
       return xstream.of(Packet.create('unload_chunk', {
@@ -410,7 +423,7 @@ module.exports.main = ({ storage, client }) => {
       //   }),
       //   position: 2,
       // }));
-      const initialized = generate_plot_chunk({ x, z });
+      const initialized = await generate_plot_chunk({ x, z });
       storage.set([`world`, x, z], initialized);
       return initialized;
     }

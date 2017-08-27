@@ -4,7 +4,13 @@ const is_between = (n, lower, upper) => {
   return n > lower && n < upper;
 }
 
-const generate_plot_chunk = ({ x, z }) => {
+const set_immediate = () => {
+  return new Promise((yell) => {
+    setImmediate(() => yell());
+  })
+}
+
+const generate_plot_chunk = async ({ x, z }) => {
   console.log('GENERATING x, z:', x, z)
 
   const generate = (chunk_x, chunk_y, chunk_z) => {
@@ -73,8 +79,17 @@ const generate_plot_chunk = ({ x, z }) => {
   //     return block({ type: 0 });
   //   }
   // });
-  const initialized = Chunk.create_with_generator(generate);
-  return initialized;
+
+  const generator = Chunk.async_with_generator(generate)(500);
+
+  let chunk = generator.next();
+  let i = 0;
+  while (chunk.done !== true) {
+    await set_immediate();
+    chunk = generator.next();
+    i = i + 1;
+  }
+  return chunk.value;
 }
 
 module.exports = generate_plot_chunk;

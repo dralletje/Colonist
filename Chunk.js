@@ -137,6 +137,7 @@ class Chunk {
       y: 0,
       z: 0,
       x: 0,
+      n: 0,
     };
   }
 
@@ -172,19 +173,24 @@ class Chunk {
     }
   }
 
-  async async_initialize(amount_of_blocks, iniFunc) {
+  async_initialize(amount_of_blocks, iniFunc) {
     const skylight = w * l * h / 2 * 5;
     const light = w * l * h * 2;
     let biome = (w * l * h * 3) - 1;
-    let n = 0;
 
     const p = this.async_progress;
+    let n = p.n;
+    let i = 0;
 
     for (let y = p.y; y < h; y++) {
+      p.y = 0;
       for (let z = p.z; z < w; z++) {
+        p.z = 0;
         for (let x = p.x; x < l; x++, n++) {
-          if (n > amount_of_blocks) {
-            this.async_progress = { x, y, z };
+          p.x = 0;
+
+          if (i > amount_of_blocks) {
+            this.async_progress = { x, y, z, n };
             return false;
           }
 
@@ -202,6 +208,7 @@ class Chunk {
         }
       }
     }
+
     return true;
   }
 
@@ -290,7 +297,7 @@ class Chunk {
     this.data.writeUInt8(biome, cursor);
   }
 
-  dump() {
+  * dump() {
     //OLD/INTERNAL FORMAT:
     //The first w*l*h*2 bytes are blocks, each of which are shorts.
     //After that, the first w*l*h*0.5 bytes are block-light-levels, each half-bytes.
@@ -303,9 +310,6 @@ class Chunk {
     let skyLightStart = blockLightStart + Chunk.l * Chunk.w * Chunk.h / 2;
     let biomestart = skyLightStart + Chunk.l * Chunk.w * Chunk.h / 2;
 
-
-
-
     for (let y = 0; y < 16; y++) {
       let chunkapp = Chunk.packingProtocol.createPacketBuffer('section', {
         bitsPerBlock: 13,
@@ -315,6 +319,7 @@ class Chunk {
         skyLight: this.data.slice(skyLightStart + y * chunkBlocks / 2, skyLightStart + (y + 1) * chunkBlocks / 2),
       });
       outputBuffer = Buffer.concat([outputBuffer, chunkapp]);
+      yield null;
     }
 
     let ret = Buffer.concat([outputBuffer, this.data.slice(biomestart, biomestart + Chunk.l * Chunk.w)]);

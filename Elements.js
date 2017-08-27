@@ -20,6 +20,18 @@ const Chunk = {
     chunk.initialize(fn);
     return chunk;
   },
+  async_with_generator: (fn) => {
+    return function* (initial_blocks = 0) {
+      let chunk = new Crap_Chunk();
+      let done = chunk.async_initialize(initial_blocks, fn);
+      while (done === false) {
+        const amount_of_blocks = yield null;
+        done = chunk.async_initialize(amount_of_blocks || initial_blocks, fn);
+      }
+      yield chunk;
+      return chunk;
+    }
+  },
   load: (raw) => {
     let chunk = new Chunk();
     chunk.load(raw);

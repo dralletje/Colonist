@@ -35,19 +35,11 @@ module.exports = function render_elements(n) {
     return xs.create({
       start: listeners => {
         const continue_queue = () => {
-          if (active > n) {
-            return;
-          }
-          if (pending.length === 0) {
+          if (pending.length === 0 || active > n) {
             return;
           }
 
           const entry = pending.shift();
-
-          if (!entry) {
-            return continue_queue();
-          }
-
           const { progress, status, key, priority } = entry;
           // console.log('priority:', priority);
 
@@ -69,10 +61,21 @@ module.exports = function render_elements(n) {
 
           mounted.get(key).progress = 'working';
           active = active + 1;
+
+          if (active < n) {
+            continue_queue();
+          }
+
           if (debug) console.log("START TASK", active)
           action(entry.props).addListener({
             next: item => {
               // TODO Check if status and progress are still the same
+              if (entry.status !== status || entry.progress !== 'working') {
+                console.warn('WHAT')
+                console.warn('entry:', entry);
+                console.warn('status, progress:', status, progress);
+              }
+
               if (debug) console.log('TASK EMIT')
               listeners.next(item);
             },
