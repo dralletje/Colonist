@@ -133,6 +133,11 @@ class Chunk {
   constructor() {
     this.data = new Buffer(BUFFER_SIZE);
     this.data.fill(0);
+    this.async_progress = {
+      y: 0,
+      z: 0,
+      x: 0,
+    };
   }
 
   initialize(iniFunc) {
@@ -140,12 +145,20 @@ class Chunk {
     const light = w * l * h * 2;
     let biome = (w * l * h * 3) - 1;
     let n = 0;
+
+    const constants = {
+      only_air_above_this_block: Symbol(`Only air above this block`),
+    }
+
     for (let y = 0; y < h; y++) {
       for (let z = 0; z < w; z++) {
         for (let x = 0; x < l; x++, n++) {
           if (y == 0)
             biome++;
-          const block = iniFunc(x, y, z, n);
+          const block = iniFunc(x, y, z, constants);
+          if (block === constants.only_air_above_this_block) {
+            throw new Error(`NOT YET IMPLEMENTED SORRY`);
+          }
           if (block == null)
             continue;
           this.data.writeUInt16LE(block.type << 4 | block.metadata, n * 2);
@@ -157,6 +170,39 @@ class Chunk {
         }
       }
     }
+  }
+
+  async async_initialize(amount_of_blocks, iniFunc) {
+    const skylight = w * l * h / 2 * 5;
+    const light = w * l * h * 2;
+    let biome = (w * l * h * 3) - 1;
+    let n = 0;
+
+    const p = this.async_progress;
+
+    for (let y = p.y; y < h; y++) {
+      for (let z = p.z; z < w; z++) {
+        for (let x = p.x; x < l; x++, n++) {
+          if (n > amount_of_blocks) {
+            this.async_progress = { x, y, z };
+            return false;
+          }
+
+          if (y === 0)
+            biome++;
+          const block = iniFunc(x, y, z, n);
+          if (block == null)
+            continue;
+          this.data.writeUInt16LE(block.type << 4 | block.metadata, n * 2);
+          writeUInt4LE(this.data, block.light, n * 0.5 + light);
+          writeUInt4LE(this.data, block.skyLight, n * 0.5 + skylight);
+          if (y === 0) {
+            this.data.writeUInt8(block.biome.id || 0, biome);
+          }
+        }
+      }
+    }
+    return true;
   }
 
   getBlock(pos) {
