@@ -1,4 +1,5 @@
 const xs = require('xstream').default;
+const chalk = require('chalk');
 
 const compare = (a, b) => {
   if (a > b) return +1;
@@ -79,8 +80,8 @@ module.exports = function render_elements(n) {
               if (debug) console.log('TASK EMIT')
               listeners.next(item);
             },
-            err: err => {
-              console.log('err:', err)
+            error: err => {
+              listeners.error(err);
             },
             complete: () => {
               active = active - 1;
@@ -175,7 +176,7 @@ module.exports = function render_elements(n) {
       },
 
       stop: () => {
-        console.log("STOPPED");
+        console.log(chalk.red(`STOPPED parallel render!`));
         pending = [];
       }
     });

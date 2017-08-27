@@ -56,16 +56,15 @@ const create_server_driver = (server) => (packets$) => {
     },
   });
 
-  const client_connect$event = rxjs_init((listener) => {
-    server.on('login', (client) => {
-      listener.next({ type: 'add', item: client });
-      client.on('end', () => {
-        listener.next({ type: 'delete', item: client });
-      });
-    });
-
-    return () => {};
-  });
+  const client_connect$event =
+    fromEvent(server, 'login')
+    .map(client =>
+      xstream.merge(
+        xstream.of({ type: 'add', item: client }),
+        fromEvent(client, 'end').mapTo({ type: 'delete', item: client })
+      )
+    )
+    .flatten()
 
   return {
     clients$: client_connect$event
@@ -81,6 +80,18 @@ const create_server_driver = (server) => (packets$) => {
   };
 }
 
+const fromEvent = (emitter, event, map_args = args => args[0]) => {
+  return rxjs_init(listener => {
+    const handler = (...args) => {
+      listener.next(map_args(args));
+    };
+    emitter.on(event, handler);
+    return () => {
+      emitter.removeListener(event, handler);
+    }
+  })
+}
+
 const client_select = (client) => {
   return {
     uuid: client.uuid,
@@ -88,47 +99,12 @@ const client_select = (client) => {
     username: client.username,
 
     // Naming for this one is odd?
-    on_end$: rxjs_init(listener => {
-      client.on('end', () => {
-        listener.next();
-      });
-
-      return () => {};
-    }),
-
-    // state: (namespace) => {
-    //
-    // },
-    select: (packet_name) => {
-      return rxjs_init(listener => {
-        client.on('packet', (data, metadata) => {
-          if (metadata.name === packet_name) {
-            listener.next(data);
-          }
-        });
-
-        return () => {
-          // TODO UNSUBSCRIBE
-        }
-      })
-    },
+    on_end$: fromEvent(client, 'end').take(1),
+    select: (packet_name) =>
+      fromEvent(client, 'packet', args => args)
+      .filter(([data, metadata]) => metadata.name === packet_name)
+      .map(([data]) => data),
   };
-}
-
-const map_complete = (fn) => (input$) => {
-  return rxjs_init(listener => {
-    input$.addListener({
-      next: (item) => {
-        listener.next(item);
-      },
-      complete: () => {
-        const result = fn();
-        if (result !== undefined) {
-          listener.next(result);
-        }
-      }
-    });
-  });
 }
 
 const client_view = (client, packets$) => {

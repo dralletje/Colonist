@@ -3,6 +3,7 @@ let { isEqual, fromPairs, range, flatten } = require('lodash');
 let xstream = require('xstream').default;
 let dropRepeats = require('xstream/extra/dropRepeats').default;
 let { Block, Chunk, Packet, Position } = require('./Elements');
+let chalk = require('chalk');
 
 const json_or_just_text = json => {
   try {
@@ -226,14 +227,18 @@ const render_elements = require('./flattenParallel');
 
 const xstream_from_async = (fn) => (...args) => {
   return xstream.create({
-    start: (listeners) => {
-      fn(...args).then(x => {
-        listeners.next(x);
-        listeners.complete();
-      })
-      .catch(x => {
-        listeners.error(x);
-      })
+    start: (listener) => {
+      try {
+        fn(...args).then(x => {
+          listener.next(x);
+          listener.complete();
+        })
+        .catch(x => {
+          listener.error(x);
+        })
+      } catch (e) {
+        console.log('e:', e);
+      }
     },
     stop: () => {},
   })
@@ -241,7 +246,6 @@ const xstream_from_async = (fn) => (...args) => {
 
 const chat_select = (client) => {
   return client.select('chat').map(packet => {
-    console.log('packet:', packet)
     var message = json_or_just_text(packet.message);
     return {
       username: client.username,
@@ -307,29 +311,23 @@ const tablist_view = (tablist_items$) => {
 const chunk_view = (client, retrieve_chunk, visible_chunks$) => {
   const Load_Chunk = {
     create: xstream_from_async(async chunk => {
-      await Promise.delay(50);
+      const chunkdata = await retrieve_chunk(chunk);
 
-      try {
-        const chunkdata = await retrieve_chunk(chunk);
-
-        let gen = chunkdata.dump();
-        let chunkdump = gen.next();
-        while (chunkdump.done !== true) {
-          await set_immediate();
-          chunkdump = gen.next();
-        }
-
-        return Packet.create('map_chunk', {
-          x: chunk.x,
-          z: chunk.z,
-          groundUp: true,
-          bitMap: 0xffff,
-          chunkData: chunkdump.value,
-          blockEntities: [],
-        });
-      } catch (e) {
-        console.log('e:', e)
+      let gen = chunkdata.dump();
+      let chunkdump = gen.next();
+      while (chunkdump.done !== true) {
+        await set_immediate();
+        chunkdump = gen.next();
       }
+
+      return Packet.create('map_chunk', {
+        x: chunk.x,
+        z: chunk.z,
+        groundUp: true,
+        bitMap: 0xffff,
+        chunkData: chunkdump.value,
+        blockEntities: [],
+      });
     }),
     destroy: (chunk) => {
       return xstream.of(Packet.create('unload_chunk', {
@@ -354,7 +352,7 @@ const chunk_view = (client, retrieve_chunk, visible_chunks$) => {
       }
     })
   })
-  .compose(render_elements(3))
+  .compose(render_elements(5))
   // .debug(x => {
   //   if (x.name === 'unload_chunk') {
   //     console.log('x:', x)
@@ -363,10 +361,17 @@ const chunk_view = (client, retrieve_chunk, visible_chunks$) => {
 }
 
 module.exports.main = ({ storage, client }) => {
+  console.log(chalk.green(`Client connected (${chalk.blue(client.username)})`));
+  client.on_end$.addListener({
+    complete: () => {
+      console.log(chalk.red(`Client disconnected (${chalk.blue(client.username)})`));
+    },
+  })
+
   const spawn = {
     x: 0,
-    y: 100,
-    z: 0,
+    y: 245,
+    z: -13,
     yaw: 0,
     pitch: 0,
   };
