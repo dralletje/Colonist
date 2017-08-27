@@ -90,6 +90,8 @@ const generate_plot_chunk = async ({ x, z }) => {
     chunk = generator.next();
     i = i + 1;
   }
+
+  console.log(chalk.dim(`DONE GENERATING ${x}:${z}`));
   return chunk.value;
 }
 

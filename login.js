@@ -310,6 +310,9 @@ const tablist_view = (tablist_items$) => {
 
 const chunk_view = (client, retrieve_chunk, visible_chunks$) => {
   const Load_Chunk = {
+    should_component_update: (oldprops, nextprops) => {
+      return oldprops.x !== nextprops.x || oldprops.z !== nextprops.z;
+    },
     create: xstream_from_async(async chunk => {
       const chunkdata = await retrieve_chunk(chunk);
 
@@ -329,6 +332,10 @@ const chunk_view = (client, retrieve_chunk, visible_chunks$) => {
         blockEntities: [],
       });
     }),
+    // update: (chunk) => {
+    //   console.log(chalk.green('UPDATE! chunk:'), chunk);
+    //   return xstream.empty();
+    // },
     destroy: (chunk) => {
       return xstream.of(Packet.create('unload_chunk', {
         chunkX: chunk.x,
@@ -339,7 +346,7 @@ const chunk_view = (client, retrieve_chunk, visible_chunks$) => {
 
   return visible_chunks$
   .map((chunks) => {
-    // This returns an array of "elements" that can be resolveds
+    // This returns an map of "elements" that can be resolveds
     return chunks.map(chunk => {
       return {
         type: Load_Chunk,

@@ -7,6 +7,30 @@ const compare = (a, b) => {
   return 0;
 }
 
+// has_changed_fn = prev_el.type === next_el.type
+const get_changes_map = ({ keyed_array, old_map, has_changed }) => {
+  let removed = new Map(old_map);
+  let changed = new Map();
+  let added = new Map();
+
+  keyed_array.forEach(next_el => {
+    const key = next_el.key;
+    const prev_el = old_map.get(key);
+
+    if (prev_el && !has_changed(prev_el, next_el)) {
+      // TODO if props haven't changed, the total thing hasn't
+      removed.delete(key);
+      changed.set(key, next_el);
+      return;
+    } else {
+      added.set(key, next_el);
+      return;
+    }
+  });
+
+  return { removed, changed, added };
+}
+
 module.exports = function render_elements(n) {
   return function(input$) {
     /*:flow
@@ -42,12 +66,6 @@ module.exports = function render_elements(n) {
 
           const entry = pending.shift();
           const { progress, status, key, priority } = entry;
-          // console.log('priority:', priority);
-
-          if (progress !== 'waiting') {
-            // Already running or already done
-            return continue_queue();
-          }
 
           const action_map = {
             mounted: entry.type.create,
@@ -58,6 +76,10 @@ module.exports = function render_elements(n) {
 
           if (!action) {
             return continue_queue();
+          }
+
+          if (mounted.get(key).progress !== 'waiting') {
+            console.log(chalk.blue(`NOT WAITING`), mounted.get(key));
           }
 
           mounted.get(key).progress = 'working';
@@ -71,19 +93,17 @@ module.exports = function render_elements(n) {
           action(entry.props).addListener({
             next: item => {
               // TODO Check if status and progress are still the same
+              if (debug) console.log('TASK EMIT')
+              listeners.next(item);
+            },
+            error: listeners.error,
+            complete: () => {
               if (entry.status !== status || entry.progress !== 'working') {
                 console.warn('WHAT')
                 console.warn('entry:', entry);
                 console.warn('status, progress:', status, progress);
               }
 
-              if (debug) console.log('TASK EMIT')
-              listeners.next(item);
-            },
-            error: err => {
-              listeners.error(err);
-            },
-            complete: () => {
               active = active - 1;
               // TODO Check if status and progress are still the same
               if (status === 'unmounted') {
@@ -100,34 +120,23 @@ module.exports = function render_elements(n) {
         }
 
         input$.addListener({
-          err: (err) => {
-            console.log('err:', err)
-          },
+          complete: listeners.complete,
+          error: listeners.error,
           next: (elements) => {
-            let removed = new Map(mounted);
-            let changed = new Map();
-            let added = new Map();
-
-            elements.forEach(next_el => {
-              const key = next_el.key;
-              const prev_el = mounted.get(key);
-
-              if (prev_el && prev_el.type === next_el.type) {
-                // TODO if props haven't changed, the total thing hasn't
-                removed.delete(key);
-                changed.set(key, next_el);
-                return;
-              } else {
-                added.set(key, next_el);
-                return;
-              }
+            // `removed` is a map of all values that got removed,
+            // `changed` is a map of all values that got changed and
+            // `added`... you guesed it
+            const { removed, changed, added } = get_changes_map({
+              keyed_array: elements,
+              old_map: mounted,
+              has_changed: (prev, next) => prev.type !== next.type,
             });
 
             for (let deleted_entry of removed.values()) {
               // console.log('removing:', key);
               const current_entry = mounted.get(deleted_entry.key);
               // If it hasn't even mounted yet, kill totally
-              if (current_entry.status === 'waiting' && current_entry.progress === 'mounted') {
+              if (current_entry.progress === 'waiting' && current_entry.status === 'mounted') {
                 mounted.delete(deleted_entry.key);
               } else {
                 mounted.set(deleted_entry.key, Object.assign({}, deleted_entry, {
@@ -144,16 +153,41 @@ module.exports = function render_elements(n) {
 
               // For now I just update the priority
               const current_entry = mounted.get(updated_entry.key);
-              // TODO Check if props differ
-              // TODO Queue optional update job
-              // TODO But only if it has already mounted
-              mounted.set(updated_entry.key, Object.assign({}, current_entry, {
-                priority: updated_entry.priority,
-              }));
+              // In good react fashion, I want this already...
+              // TODO Make sure this doesn't let bugs sneak in
+              const should_update =
+                updated_entry.type.should_component_update || (() => true);
+
+              if (current_entry.progress === 'done') {
+                // It is "done" with whatever it was doing, but it is still here
+                // so it has either 1. mounted 2. updated
+                // ... in both of these cases we want to reschedule an update
+                if (should_update(current_entry, updated_entry)) {
+                  mounted.set(updated_entry.key, Object.assign({}, updated_entry, {
+                    status: 'updated',
+                    progress: 'waiting',
+                  }));
+                }
+              } else if (current_entry.progress === 'working') {
+                // TODO Cancel current job? Directly reschedule new one?
+                if (should_update(current_entry, updated_entry)) {
+                  console.log(chalk.blue('No idea how this would work'));
+                }
+              } else if (current_entry.progress === 'waiting') {
+                // In the case it is waiting, we want to replace it but keep its status.
+                // TODO If it is waiting for unmount then priority will be fucked up?
+                // (because right now unmounts have a priority of 100 (high))
+                mounted.set(updated_entry.key, Object.assign({}, updated_entry, {
+                  progress: current_entry.progress,
+                  status: current_entry.status,
+                }));
+              } else {
+                throw new Error(`What is going on '${current_entry.progress}'`);
+              }
             }
 
             for (let added_entry of added.values()) {
-              // console.log('adding:', key)
+              // console.log('adding:', key);
               mounted.set(added_entry.key, Object.assign({}, added_entry, {
                 progress: 'waiting',
                 status: 'mounted',
@@ -167,6 +201,7 @@ module.exports = function render_elements(n) {
                 pending.push(entry);
               }
             }
+
             // Sort pending so higher priority comes first
             pending.sort((a, b) => compare(a.priority, b.priority));
 
