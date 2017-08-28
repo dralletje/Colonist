@@ -16,7 +16,12 @@
     "vec3": "^0.1.3"
   },
   "devDependencies": {
+    "babel-cli": "^6.26.0",
     "babel-eslint": "^7.2.3",
+    "babel-plugin-syntax-trailing-function-commas": "^6.22.0",
+    "babel-plugin-transform-object-rest-spread": "^6.26.0",
+    "babel-preset-env": "^1.6.0",
+    "babel-preset-react": "^6.24.1",
     "eslint": "^3.19.0",
     "eslint-config-react-app": "^2.0.0",
     "eslint-plugin-flowtype": "^2.33.0",
@@ -37,7 +42,27 @@
     "url": "https://github.com/dralletje/Colonist/issues"
   },
   "eslintConfig": {
-    "extends": "react-app"
+    "extends": "react-app",
+    "rules": {
+      "react/jsx-pascal-case": 0
+    }
+  },
+  "babel": {
+    "presets": [
+      "react",
+      [
+        "env",
+        {
+          "targets": {
+            "node": "current"
+          }
+        }
+      ]
+    ],
+    "plugins": [
+      "babel-plugin-syntax-trailing-function-commas",
+      "babel-plugin-transform-object-rest-spread"
+    ]
   },
   "homepage": "https://github.com/dralletje/Colonist#readme"
 }

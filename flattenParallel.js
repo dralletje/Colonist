@@ -7,8 +7,14 @@ const compare = (a, b) => {
   return 0;
 }
 
-// has_changed_fn = prev_el.type === next_el.type
-const get_changes_map = ({ keyed_array, old_map, has_changed }) => {
+class PreconditionError extends Error {}
+const precondition = (predicate, message) => {
+  if (!predicate) {
+    throw new PreconditionError(message);
+  }
+}
+
+const get_changes_map = ({ keyed_array, old_map }) => {
   let removed = new Map(old_map);
   let changed = new Map();
   let added = new Map();
@@ -17,7 +23,12 @@ const get_changes_map = ({ keyed_array, old_map, has_changed }) => {
     const key = next_el.key;
     const prev_el = old_map.get(key);
 
-    if (prev_el && !has_changed(prev_el, next_el)) {
+    if (prev_el) {
+      precondition(
+        prev_el.type === next_el.type,
+        `Type of element can not change (key: ${key})`
+      );
+
       // TODO if props haven't changed, the total thing hasn't
       removed.delete(key);
       changed.set(key, next_el);
@@ -125,12 +136,43 @@ module.exports = function render_elements(n) {
           next: (elements) => {
             // `removed` is a map of all values that got removed,
             // `changed` is a map of all values that got changed and
-            // `added`... you guesed it
+            // `added`... you guessed it
+            // console.log('elements:', elements)
+
             const { removed, changed, added } = get_changes_map({
               keyed_array: elements,
               old_map: mounted,
-              has_changed: (prev, next) => prev.type !== next.type,
             });
+
+            // const _removed = [...removed.values()].map(entry => {
+            //   return {
+            //     key: entry.key,
+            //     type: 'removed',
+            //     next: null,
+            //     prev: entry,
+            //   }
+            // });
+            //
+            // const _changed = [...changed.values()].map(entry => {
+            //   return {
+            //     key: entry.key,
+            //     type: 'changed',
+            //     next: entry,
+            //     prev: mounted.get(entry.key),
+            //   }
+            // });
+            //
+            // const _added = [...added.values()].map(entry => {
+            //   return {
+            //     key: entry.key,
+            //     type: 'added',
+            //     next: entry,
+            //     prev: null,
+            //   }
+            // });
+            // const changes = [..._removed, ..._changed, ..._added];
+
+            // console.log('removed, changed, added:', removed, changed, added)
 
             for (let deleted_entry of removed.values()) {
               // console.log('removing:', key);

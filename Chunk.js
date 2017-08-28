@@ -1,4 +1,4 @@
-var Block = require('./Block')('1.9');
+var Block = require('./Block');
 
 const w = 16;
 const l = 16;

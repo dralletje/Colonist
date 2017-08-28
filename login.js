@@ -13,6 +13,19 @@ const json_or_just_text = json => {
   }
 };
 
+const React = {
+  createElement: (type, props, children) => {
+    const { key, priority, ...real_props } = props;
+
+    return {
+      type: type,
+      key: key,
+      priority: priority,
+      props: real_props,
+    };
+  }
+}
+
 const send_nearby_chunks = ({ chunk, view }) =>
   flatten(
     range(chunk.x - view, chunk.x + view).map(x =>
@@ -308,13 +321,21 @@ const tablist_view = (tablist_items$) => {
   });
 }
 
-const chunk_view = (client, retrieve_chunk, visible_chunks$) => {
-  const Load_Chunk = {
-    should_component_update: (oldprops, nextprops) => {
-      return oldprops.x !== nextprops.x || oldprops.z !== nextprops.z;
-    },
-    create: xstream_from_async(async chunk => {
-      const chunkdata = await retrieve_chunk(chunk);
+const Component = {
+  create: (type_definition) => {
+    // TODO Do some stuff that we need to apply to components?
+    // Some symbol to indicate it really is a component?
+    return type_definition;
+  },
+};
+
+const Load_Chunk = Component.create({
+  should_component_update: (oldprops, nextprops) => {
+    return oldprops.x !== nextprops.x || oldprops.z !== nextprops.z;
+  },
+  create: xstream_from_async(async chunk_props => {
+    try {
+      const chunkdata = await chunk_props.generate(chunk_props);
 
       let gen = chunkdata.dump();
       let chunkdump = gen.next();
@@ -324,48 +345,87 @@ const chunk_view = (client, retrieve_chunk, visible_chunks$) => {
       }
 
       return Packet.create('map_chunk', {
-        x: chunk.x,
-        z: chunk.z,
+        x: chunk_props.x,
+        z: chunk_props.z,
         groundUp: true,
         bitMap: 0xffff,
         chunkData: chunkdump.value,
         blockEntities: [],
       });
-    }),
-    // update: (chunk) => {
-    //   console.log(chalk.green('UPDATE! chunk:'), chunk);
-    //   return xstream.empty();
-    // },
-    destroy: (chunk) => {
-      return xstream.of(Packet.create('unload_chunk', {
-        chunkX: chunk.x,
-        chunkZ: chunk.z,
-      }))
-    },
-  };
+    } catch (e) {
+      console.log('e:', e)
+    }
+  }),
+  // update: (chunk) => {
+  //   console.log(chalk.green('UPDATE! chunk:'), chunk);
+  //   return xstream.empty();
+  // },
+  destroy: (chunk_props) => {
+    return xstream.of(Packet.create('unload_chunk', {
+      chunkX: chunk_props.x,
+      chunkZ: chunk_props.z,
+    }))
+  },
+});
 
-  return visible_chunks$
-  .map((chunks) => {
-    // This returns an map of "elements" that can be resolveds
-    return chunks.map(chunk => {
-      return {
-        type: Load_Chunk,
-        key: `${chunk.x}:${chunk.z}`, // TODO object keys?
-        priority: Math.ceil(chunk.distance),
-        props: {
-          x: chunk.x,
-          z: chunk.z,
-        },
-      }
-    })
-  })
-  .compose(render_elements(5))
-  // .debug(x => {
-  //   if (x.name === 'unload_chunk') {
-  //     console.log('x:', x)
-  //   }
-  // })
-}
+/*
+lowercase components are base components. IN PRINCIPLE, this should be
+one for every way the output could change. Examples
+
+<audio />
+<packet />
+<ui />
+
+Every one of those is the smallest atom you can get for playing sounds,
+sending packets and showing a user interface,
+
+They all present a type of render. react-dom can be used for ui
+(might need to rename it as we get pretty far from react),
+audio can be rendered with react-audio, etc...
+
+They all get registered down where you render your app:
+React.render(<App />, {
+  ui: react_dom(),
+  audio: react_audio(),
+  packet: react_packet(), // Might rename this network or something
+});
+
+### Parent elements
+
+<ui backgroundColor="blue" fontSize={16}>
+  <ui backgroundColor="red" />
+</ui>
+
+FOr the above example, the result would be a red background,
+and font-size 16. Base packets can only change children of their own kind.
+Adding a prop on a <ui /> element will never influence how the <audio /> or <network /> element render.
+
+In theory, the child receives the props of it's parent and can changes them to its likings.
+Most of the time it will involve simply merging the parent and childs props (where child props win).
+Components can, if they need to, perform any transformation on the props.
+
+DisplayBlockUI components (with a capital, it is a custom component) could, for example,
+use the props of its parent to calculate where and how it should position.
+(Yeah, I think you can literally model any program this way, beautifully)
+
+ERR
+UI determines how it should look on a two way "conversation" between the
+parent and the child :-/
+
+Atoms (eg <ui />) can also have a function as children, to pass in data it retrieved.
+This retrieval happens on the top, at the specified renderer for that atom.
+Every time render of a func-as-child is done, that code is sent back up to the
+place it left of (to fetch the data) and continue rendering like it was a state update.
+
+
+
+The line for lowercase components is really odd, as ofcourse you can break it down
+much much further, so maybe we will turn them into lower level ones later idk
+
+Also good one: <http />
+and <cpu computation={fn} />
+
+*/
 
 module.exports.main = ({ storage, client }) => {
   console.log(chalk.green(`Client connected (${chalk.blue(client.username)})`));
@@ -461,8 +521,33 @@ module.exports.main = ({ storage, client }) => {
         maxPlayers: 20,
         reducedDebugInfo: false,
       })),
+      // xstream.of(
+      //   <packet
+      //     name="login"
+      //     data={{
+      //       entityId: client.id,
+      //       levelType: 'default',
+      //       gameMode: 1,
+      //       dimension: 0,
+      //       difficulty: 2,
+      //       maxPlayers: 20,
+      //       reducedDebugInfo: false,
+      //     }}
+      //   />
+      // ),
       location_view(client, my_location$),
-      chunk_view(client, retrieve_chunk, chunks_to_load$)
+      chunks_to_load$.map(chunks => {
+        return chunks.map(chunk =>
+          <Load_Chunk
+            key={`${chunk.x}:${chunk.z}`} // TODO object keys?
+            priority={Math.ceil(chunk.distance)}
+            x={chunk.x}
+            z={chunk.z}
+            generate={retrieve_chunk} // TODO this should be func-as-child component
+          />
+        );
+      })
+      .compose(render_elements(5))
     ),
   }
 }

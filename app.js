@@ -1,6 +1,7 @@
 const mc = require('minecraft-protocol');
 const { run } = require('@cycle/run');
 const xstream = require('xstream').default;
+const chalk = require('chalk');
 
 const flattenConcurrently = require('xstream/extra/flattenConcurrently').default;
 const pairwise = require('xstream/extra/pairwise').default;
@@ -139,7 +140,7 @@ const stream_of_added_items =
   })
 
 const server_main = ({ mcserver }) => {
-
+  console.log(chalk.green(`Server started!`));
 
   const create_client_component = (client) => {
     clear_require_cache();
