@@ -30,6 +30,7 @@
     "eslint-plugin-react": "^7.0.1"
   },
   "scripts": {
+    "start": "babel-node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -44,6 +45,7 @@
   "eslintConfig": {
     "extends": "react-app",
     "rules": {
+      "no-use-before-define": 0,
       "react/jsx-pascal-case": 0
     }
   },
@@ -61,7 +63,8 @@
     ],
     "plugins": [
       "babel-plugin-syntax-trailing-function-commas",
-      "babel-plugin-transform-object-rest-spread"
+      "babel-plugin-transform-object-rest-spread",
+      "babel-plugin-transform-class-properties"
     ]
   },
   "homepage": "https://github.com/dralletje/Colonist#readme"

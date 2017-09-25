@@ -4,6 +4,7 @@ let xstream = require('xstream').default;
 let dropRepeats = require('xstream/extra/dropRepeats').default;
 let { Block, Chunk, Packet, Position } = require('./Elements');
 let chalk = require('chalk');
+let React = require('./React');
 
 const json_or_just_text = json => {
   try {
@@ -12,19 +13,6 @@ const json_or_just_text = json => {
     return json;
   }
 };
-
-const React = {
-  createElement: (type, props, children) => {
-    const { key, priority, ...real_props } = props;
-
-    return {
-      type: type,
-      key: key,
-      priority: priority,
-      props: real_props,
-    };
-  }
-}
 
 const send_nearby_chunks = ({ chunk, view }) =>
   flatten(
@@ -63,7 +51,7 @@ const capitalize = (text) => {
 //     Object.values(server.clients).forEach(_client => {
 //       client_send(_client, packet);
 //     });
-//   }
+//   }2
 //   const broadcast_nearby = (packet) => {
 //     Object.values(server.clients).forEach(_client => {
 //       if (_client.id !== client.id) {
@@ -229,9 +217,13 @@ const location_view = (client, location$) => {
     .map(position => {
       console.log('SENDING', position);
       last_positions.set(client, position);
-      return Packet.create('position', Object.assign({
-        flags: 0x00,
-      }, position));
+      return <packet
+        name="position"
+        data={{
+          flags: 0x00,
+          ...position,
+        }}
+      />
     })
 }
 
@@ -240,17 +232,13 @@ const render_elements = require('./flattenParallel');
 
 const xstream_from_async = (fn) => (...args) => {
   return xstream.create({
-    start: (listener) => {
+    start: async (listener) => {
       try {
-        fn(...args).then(x => {
-          listener.next(x);
-          listener.complete();
-        })
-        .catch(x => {
-          listener.error(x);
-        })
+        const x = await fn(...args);
+        listener.next(x);
+        listener.complete();
       } catch (e) {
-        console.log('e:', e);
+        listener.error(e);
       }
     },
     stop: () => {},
@@ -270,33 +258,36 @@ const chat_select = (client) => {
 // TODO Make this into... not an event? :-/ HOW?!
 const chat_view = (messages$event) => {
   return messages$event.map(({ username, message }) => {
-    return Packet.create('chat', {
-      message: JSON.stringify({
-        text: '',
-        extra: [
-          {
-            text: '[Mercury] ',
-            color: 'dark_blue',
-          },
-          {
-            text: `${capitalize(username)}: `,
-            color: 'dark_purple',
-            clickEvent: {
-              action: 'suggest_command',
-              value: `§5@${username} §f`,
+    return <packet
+      name="chat"
+      data={{
+        message: JSON.stringify({
+          text: '',
+          extra: [
+            {
+              text: '[Mercury] ',
+              color: 'dark_blue',
             },
-            hoverEvent: {
-              action: 'show_text',
-              value: `Click to chat!`,
+            {
+              text: `${capitalize(username)}: `,
+              color: 'dark_purple',
+              clickEvent: {
+                action: 'suggest_command',
+                value: `§5@${username} §f`,
+              },
+              hoverEvent: {
+                action: 'show_text',
+                value: `Click to chat!`,
+              },
             },
-          },
-          {
-            text: message,
-            color: 'gray',
-          },
-        ],
-      }),
-    });
+            {
+              text: message,
+              color: 'gray',
+            },
+          ],
+        })
+      }}
+    />
   });
 };
 
@@ -305,20 +296,23 @@ const random_UUID = () => {
 }
 
 const tablist_view = (tablist_items$) => {
-  return tablist_items$.map(tablist_items => {
-    return Packet.create('player_info', {
-      action: 0,
-      data: Object.values(tablist_items).map((item) => {
-        return {
-          UUID: item.UUID || random_UUID(),
-          name: item.name,
-          properties: item.properties || [],
-          gamemode: item.gamemode || 2,
-          ping: item.ping || 100,
-        };
-      }),
-    });
-  });
+  return tablist_items$.map(tablist_items =>
+    <packet
+      name="player_info"
+      data={{
+        action: 0,
+        data: Object.values(tablist_items).map((item) => {
+          return {
+            UUID: item.UUID || random_UUID(),
+            name: item.name,
+            properties: item.properties || [],
+            gamemode: item.gamemode || 2,
+            ping: item.ping || 100,
+          };
+        }),
+      }}
+    />
+  );
 }
 
 const Component = {
@@ -334,37 +328,43 @@ const Load_Chunk = Component.create({
     return oldprops.x !== nextprops.x || oldprops.z !== nextprops.z;
   },
   create: xstream_from_async(async chunk_props => {
-    try {
-      const chunkdata = await chunk_props.generate(chunk_props);
+    const chunkdata = await chunk_props.generate(chunk_props);
 
-      let gen = chunkdata.dump();
-      let chunkdump = gen.next();
-      while (chunkdump.done !== true) {
-        await set_immediate();
-        chunkdump = gen.next();
-      }
-
-      return Packet.create('map_chunk', {
-        x: chunk_props.x,
-        z: chunk_props.z,
-        groundUp: true,
-        bitMap: 0xffff,
-        chunkData: chunkdump.value,
-        blockEntities: [],
-      });
-    } catch (e) {
-      console.log('e:', e)
+    let gen = chunkdata.dump();
+    let chunkdump = gen.next();
+    while (chunkdump.done !== true) {
+      await set_immediate();
+      chunkdump = gen.next();
     }
+
+    return (
+      <packet
+        name="map_chunk"
+        data={{
+          x: chunk_props.x,
+          z: chunk_props.z,
+          groundUp: true,
+          bitMap: 0xffff,
+          chunkData: chunkdump.value,
+          blockEntities: [],
+        }}
+      />
+    );
   }),
   // update: (chunk) => {
   //   console.log(chalk.green('UPDATE! chunk:'), chunk);
   //   return xstream.empty();
   // },
   destroy: (chunk_props) => {
-    return xstream.of(Packet.create('unload_chunk', {
-      chunkX: chunk_props.x,
-      chunkZ: chunk_props.z,
-    }))
+    return xstream.of(
+      <packet
+        name="unload_chunk"
+        data={{
+          chunkX: chunk_props.x,
+          chunkZ: chunk_props.z,
+        }}
+      />
+    )
   },
 });
 
@@ -509,34 +509,31 @@ module.exports.main = ({ storage, client }) => {
         { name: 'Heya', UUID: 'xxxx' },
       ])),
       chat_view(chat$events),
-      client.select('tab_complete').map((x) => {
-        return Packet.create('tab_complete', { matches: [String(Date.now())] })
-      }),
-      xstream.of(Packet.create('login', {
-        entityId: client.id,
-        levelType: 'default',
-        gameMode: 1,
-        dimension: 0,
-        difficulty: 2,
-        maxPlayers: 20,
-        reducedDebugInfo: false,
-      })),
-      // xstream.of(
-      //   <packet
-      //     name="login"
-      //     data={{
-      //       entityId: client.id,
-      //       levelType: 'default',
-      //       gameMode: 1,
-      //       dimension: 0,
-      //       difficulty: 2,
-      //       maxPlayers: 20,
-      //       reducedDebugInfo: false,
-      //     }}
-      //   />
-      // ),
+      client.select('tab_complete').map((x) => (
+        <packet
+          name="tab_complete"
+          data={{
+            matches: [String(Date.now())],
+          }}
+        />
+      )),
+      xstream.of(
+        <packet
+          name="login"
+          data={{
+            entityId: client.id,
+            levelType: 'default',
+            gameMode: 1,
+            dimension: 0,
+            difficulty: 2,
+            maxPlayers: 20,
+            reducedDebugInfo: false,
+          }}
+        />
+      ),
       location_view(client, my_location$),
       chunks_to_load$.map(chunks => {
+        // <Parallel n={5}>
         return chunks.map(chunk =>
           <Load_Chunk
             key={`${chunk.x}:${chunk.z}`} // TODO object keys?
@@ -546,6 +543,7 @@ module.exports.main = ({ storage, client }) => {
             generate={retrieve_chunk} // TODO this should be func-as-child component
           />
         );
+        // </Parallel>
       })
       .compose(render_elements(5))
     ),

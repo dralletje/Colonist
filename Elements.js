@@ -2,6 +2,8 @@ let Crap_Block = require('./Block');
 let Crap_Chunk = require('./Chunk')();
 let { clamp } = require('lodash');
 
+let React = require('./React');
+
 const Block = {
   create: ({ type, damage = 0, skyLight = 0, light = 0 }) => {
     let b = new Crap_Block(type, damage);
@@ -92,10 +94,7 @@ const Position = {
 
 const Packet = {
   create: (name, data) => {
-    return {
-      type: 'packet',
-      name, data,
-    }
+    return <packet name={name} data={data} />;
   },
 };
 

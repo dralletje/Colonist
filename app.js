@@ -47,10 +47,17 @@ const clear_require_cache = () => {
   });
 };
 
+const precondition = (condition, message) => {
+  if (!condition) {
+    throw new Error(`${message}`);
+  }
+}
+
 const create_server_driver = (server) => (packets$) => {
   packets$.subscribe({
     next: (packet) => {
-      packet.to.write(packet.name, packet.data);
+      precondition(packet.type === 'packet', `Non-packet being sent to packet`);
+      packet.props.to.write(packet.props.name, packet.props.data);
     },
     complete: () => {
       console.log('SERVER DONE');
@@ -112,7 +119,7 @@ const client_view = (client, packets$) => {
   return packets$.map(packet => {
     // I don't do immutable here because I am afraid of the
     // performance... I know.. I know...
-    packet.to = client;
+    packet.props.to = client;
     return packet;
   })
 }
