@@ -1,0 +1,22 @@
+{
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "babel-generator": "6.21.0",
+    "flow-parser": "^0.38.0",
+    "flow-remove-types": "^1.2.0"
+  },
+  "devDependencies": {
+    "babel-eslint": "^7.0.0",
+    "flow-bin": "^0.39.0"
+  },
+  "eslintConfig": {
+    "parser": "babel"
+  },
+  "babel": {
+    "plugins": [
+      "transform-flow-strip-types"
+    ]
+  }
+}
