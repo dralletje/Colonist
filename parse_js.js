@@ -1,16 +1,19 @@
 // @flow
 
-/*
-Syntax specification
-http://www.ecma-international.org/ecma-262/8.0/
-*/
-
 import { parse } from 'babylon';
 import { flatten, uniq } from 'lodash';
 
 const precondition = (condition: boolean, message: string = `Unmet precondition`) => {
   if (!condition) {
     throw new Error(message);
+  }
+}
+
+// In the spirit of naming things after what they really are, not after
+// what they share in common
+const TODO = (condition: boolean, message: string = `TODO`) => {
+  if (!condition) {
+    throw new Error(`TODO ${message}`);
   }
 }
 
@@ -54,7 +57,7 @@ const pattern_to_operations = ({ pattern_ast, scope }) => {
   return match_one(pattern_ast.type, {
     Identifier: () => {
       return new MutationOperation({
-        object: new ScopeReferenceOperation(),
+        object: new ReferenceOperation(),
         property: get_identifier_name(pattern_ast),
         value: new AssignmentReferenceOperation(),
       });
@@ -86,7 +89,7 @@ const statement_to_operations = ({ statement_ast, scope }): Operation => {
       new OperationSequence({
         operations: statement_ast.declarations.map(declarator => {
           precondition(declarator.type === 'VariableDeclarator');
-          precondition(declarator.init != null, `I will fix undefined inits later`);
+          TODO(declarator.init != null, `I will fix undefined inits later`);
 
           return new AssignmentOperation({
             pattern: pattern_to_operations({
@@ -147,12 +150,14 @@ const expression_to_operations = ({ expression_ast, scope }): Operation => {
     ArrowFunctionExpression: () => {
       const function_scope = new Scope({
         binding_names: [
+          // Properly, params are not allowed to be rebound in the function.
+          // If it does anyway, we don't check for it or warn about it... TODO
           ...get_params_bindings({
             params: expression_ast.params
           }),
           ...get_binding_names({
             type: 'function',
-            // What about then there is no block????
+            // What about when there is no block????
             body: expression_ast.body.body,
           }),
         ]
@@ -245,8 +250,6 @@ OperationExpression {
   args: Array<SubExpressions>,
 }
 where every SubExpression can, again, contain side-effects.
-
-
 */
 
 /*
@@ -380,6 +383,73 @@ AssignmentOperation {
   },
 }
 ```
+*/
+
+/*
+Or instead we use a generic "Scope" construct to capture for
+when we -already artificially- create the operations for a pattern.
+"Scope" would act as a do-block, or a light function.
+*/
+
+/*
+function fn() {
+  console.log(y);
+  return 10;
+}
+var y = fn();
+
+shall not work in this compiler. It would create a cyclic dependency
+In node this would log "undefined", so not all valid javascript works for me.
+var y will only be defined in after fn() returned.
+In Operations it would look like
+
+FN SCOPE
+
+*/
+
+/*
+const fn = (x) => {
+  return x * 10;
+}
+
+How would this code look in operations
+
+DEFINE fn
+
+
+--
+
+Function create dependencies on the scope around it.
+So do patterns (let { inner_to_set = outer_as_default } = obj; depends on outer_as_default (found also be function invocation)
+
+EDIT
+
+Function create scope-templates (Components what?!)
+Functions in functions, are nested scope templates.
+*/
+
+// let race = (x1, x2) => {
+//   return new Promise((yell) => {
+//     let done_running = false;
+//     x1.then(() => {
+//       if (done_running === false) {
+//         done_running = true;
+//         yell();
+//       }
+//     });
+//     x2.then(() => {
+//       if (done_running === false) {
+//         done_running = true;
+//         yell();
+//       }
+//     });
+//   });
+// }
+
+/*
+race:
+- scope { locals: x1, x2 }
+  - <CallNative
 */
 
 // This is needed so I can 'catch' AssignmentReferenceOperation-s inside the pattern

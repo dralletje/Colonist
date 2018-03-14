@@ -15,7 +15,7 @@ const precondition = (predicate, message) => {
   }
 }
 
-const get_changes_map = ({ keyed_array, old_map }) => {
+export const get_changes_map = ({ keyed_array, old_map }) => {
   let removed = new Map(old_map);
   let changed = new Map();
   let added = new Map();

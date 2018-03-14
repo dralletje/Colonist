@@ -4,6 +4,8 @@
   "description": "",
   "main": "Biome.js",
   "dependencies": {
+    "@cycle/run": "^4.1.0",
+    "babel-plugin-transform-class-properties": "^6.24.1",
     "bluebird": "^3.5.0",
     "chalk": "^2.1.0",
     "lodash": "^4.17.4",

@@ -188,6 +188,7 @@ const select_location = (client) => {
   })
   .compose(dropRepeats(isEqual))
   .remember()
+  .filter(x => Boolean(x))
 }
 
 const settings_select = (client) => {
@@ -207,6 +208,7 @@ const location_view = (client, location$) => {
     .filter(position => {
       const lp = last_positions.get(client) || {};
 
+      // diff_keys: (Prev_State, Next_State) => Change
       const diff = diff_keys(lp, position);
       if (Object.keys(diff).length !== 0) {
         console.log('diff_keys(lp, position):', diff);
@@ -256,72 +258,70 @@ const chat_select = (client) => {
 }
 
 // TODO Make this into... not an event? :-/ HOW?!
-const chat_view = (messages$event) => {
-  return messages$event.map(({ username, message }) => {
-    return <packet
-      name="chat"
-      data={{
-        message: JSON.stringify({
-          text: '',
-          extra: [
-            {
-              text: '[Mercury] ',
-              color: 'dark_blue',
+const chat_view = ({ username, message }) => {
+  return <packet
+    name="chat"
+    data={{
+      message: JSON.stringify({
+        text: '',
+        extra: [
+          {
+            text: '[Mercury] ',
+            color: 'dark_blue',
+          },
+          {
+            text: `${capitalize(username)}: `,
+            color: 'dark_purple',
+            clickEvent: {
+              action: 'suggest_command',
+              value: `§5@${username} §f`,
             },
-            {
-              text: `${capitalize(username)}: `,
-              color: 'dark_purple',
-              clickEvent: {
-                action: 'suggest_command',
-                value: `§5@${username} §f`,
-              },
-              hoverEvent: {
-                action: 'show_text',
-                value: `Click to chat!`,
-              },
+            hoverEvent: {
+              action: 'show_text',
+              value: `Click to chat!`,
             },
-            {
-              text: message,
-              color: 'gray',
-            },
-          ],
-        })
-      }}
-    />
-  });
+          },
+          {
+            text: message,
+            color: 'gray',
+          },
+        ],
+      })
+    }}
+  />
 };
 
 const random_UUID = () => {
   throw new Error(`Generate random UUID not implemented yet`);
 }
 
-const tablist_view = (tablist_items$) => {
-  return tablist_items$.map(tablist_items =>
-    <packet
-      name="player_info"
-      data={{
-        action: 0,
-        data: Object.values(tablist_items).map((item) => {
-          return {
-            UUID: item.UUID || random_UUID(),
-            name: item.name,
-            properties: item.properties || [],
-            gamemode: item.gamemode || 2,
-            ping: item.ping || 100,
-          };
-        }),
-      }}
-    />
-  );
-}
+const tablist_view = tablist_items =>
+  <packet
+    name="player_info"
+    data={{
+      action: 0,
+      data: Object.values(tablist_items).map((item) => {
+        return {
+          UUID: item.UUID || random_UUID(),
+          name: item.name,
+          properties: item.properties || [],
+          gamemode: item.gamemode || 2,
+          ping: item.ping || 100,
+        };
+      }),
+    }}
+  />
 
 const Component = {
   create: (type_definition) => {
     // TODO Do some stuff that we need to apply to components?
     // Some symbol to indicate it really is a component?
+    // TODO Some "build time" optimisations? Would make on-demand components slower... would we want that?
     return type_definition;
   },
 };
+
+
 
 const Load_Chunk = Component.create({
   should_component_update: (oldprops, nextprops) => {
@@ -333,7 +333,7 @@ const Load_Chunk = Component.create({
     let gen = chunkdata.dump();
     let chunkdump = gen.next();
     while (chunkdump.done !== true) {
-      await set_immediate();
+      await set_immediate(); // Use central scheduler? From "context"?
       chunkdump = gen.next();
     }
 
@@ -396,7 +396,7 @@ React.render(<App />, {
   <ui backgroundColor="red" />
 </ui>
 
-FOr the above example, the result would be a red background,
+For the above example, the result would be a red background,
 and font-size 16. Base packets can only change children of their own kind.
 Adding a prop on a <ui /> element will never influence how the <audio /> or <network /> element render.
 
@@ -454,7 +454,6 @@ module.exports.main = ({ storage, client }) => {
   //   }
   //   return to;
   // })
-  .filter(x => Boolean(x))
 
   const my_location$ =
     xstream.merge(
@@ -505,11 +504,20 @@ module.exports.main = ({ storage, client }) => {
 
   return {
     client: xstream.merge(
-      tablist_view(xstream.of([
+      xstream.of([
         { name: 'Heya', UUID: 'xxxx' },
-      ])),
-      chat_view(chat$events),
-      client.select('tab_complete').map((x) => (
+      ]).map(tablist_view),
+      chat$events.map(chat_view),
+      // <packet onTabComplete={() =>
+      //   <packet
+      //     name="tab_complete"
+      //     data={{
+      //       matches: [String(Date.now())],
+      //     }}
+      //   />
+      // } />
+      client.select('tab_complete')
+      .map((x) => (
         <packet
           name="tab_complete"
           data={{
@@ -532,6 +540,10 @@ module.exports.main = ({ storage, client }) => {
         />
       ),
       location_view(client, my_location$),
+      // <subscribe to={chunks_to_load$}>{chunks_to_load =>
+      //   <parallel>
+      //   </parallel>
+      // }</subscribe>
       chunks_to_load$.map(chunks => {
         // <Parallel n={5}>
         return chunks.map(chunk =>
